@@ -17,12 +17,13 @@
 #
 """
 Minimalistic self-contained wrapper performing the curl calls to the ochopod proxy. The input is
-turned into a POST -H X-Shell:<> to the proxy at port TCP 9000. Any token from that input that
+turned into a POST -H X-Shell:<> to the proxy at port TCP 9000 (default). Any token from that input that
 matches a local file (wherever the script is running from) will force an upload for the said file.
 This mechanism is used for instance to upload the container definition YAML files when deploying a
 new cluster.
 
-The proxy ip or hostname is either passed as the first command-line argument or vi a $OCHOPOD_PROXY.
+The proxy ip or hostname is either passed as the first command-line argument or via $OCHOPOD_PROXY.
+The default TCP port (9000) can be overridden with the syntax <prox_ip>:<proxy_port>. 
 Type "help" to get the list of supported commands.
 
 For instance:
@@ -55,6 +56,7 @@ from common import shell
 from os.path import abspath, basename, expanduser, isdir, isfile, join
 from sys import exit
 
+PORT_DEFAULT = 9000
 
 def cli(args):
 
@@ -63,9 +65,12 @@ def cli(args):
 
         class Shell(cmd.Cmd):
 
-            def __init__(self, ip, token=None):
+            def __init__(self, ipAndPort, token=None):
                 cmd.Cmd.__init__(self)
-                self.prompt = '%s > ' % ip
+                #
+                # - do not show port number when the default one is used
+                #
+                self.prompt = '%s > ' % (ipAndPort if not ipAndPort.endswith(':%s' % PORT_DEFAULT) else ipAndPort[:-len(':%s' % PORT_DEFAULT)])
                 self.ruler = '-'
                 self.token = token
 
@@ -125,7 +130,7 @@ def cli(args):
                     line = ' '.join(substituted)
                     unrolled = ['-F %s=@%s' % (k, v) for k, v in files.items()]
                     digest = 'sha1=' + hmac.new(self.token, line, hashlib.sha1).hexdigest() if self.token else ''
-                    snippet = 'curl -X POST -H "X-Shell:%s" -H "X-Signature:%s" %s %s:9000/shell' % (line, digest, ' '.join(unrolled), ip)
+                    snippet = 'curl -X POST -H "X-Shell:%s" -H "X-Signature:%s" %s %s/shell' % (line, digest, ' '.join(unrolled), ipAndPort)
                     code, out = shell(snippet, cwd=tmp)
                     js = json.loads(out.decode('utf-8'))
                     print(js['out'] if code is 0 else 'i/o failure (is the proxy down ?)')
@@ -134,17 +139,23 @@ def cli(args):
         # - partition ip and args by looking for OCHOPOD_PROXY first
         # - if OCHOPOD_PROXY is not used, treat the first argument as the ip
         #
-        ip = None
+        ipAndPort = None
         if 'OCHOPOD_PROXY' in os.environ:
-            ip = os.environ['OCHOPOD_PROXY']
+            ipAndPort = os.environ['OCHOPOD_PROXY']
         elif len(args):
-            ip = args[0]
+            ipAndPort = args[0]
             args = args[1:] if len(args) > 1 else []
 
         #
         # - fail if left undefined
         #
-        assert ip is not None, 'either set $OCHOPOD_PROXY or pass the proxy IP as an argument'
+        assert ipAndPort is not None, 'either set $OCHOPOD_PROXY or pass the proxy IP as an argument'
+
+        #
+        # - 9000 is the default port
+        #
+        if ":" not in ipAndPort:
+            ipAndPort = ipAndPort + (':%s' % PORT_DEFAULT)
 
         #
         # - set the secret token if specified via the $OCHOPOD_TOKEN variable
@@ -157,12 +168,12 @@ def cli(args):
         #
         if len(args):
             command = " ".join(args)
-            Shell(ip, token).do_shell(command)
+            Shell(ipAndPort, token).do_shell(command)
         else:
             print('welcome to the ocho CLI ! (CTRL-C or exit to get out)')
             if token is None:
                 print 'warning, $OCHOPOD_TOKEN is undefined'
-            Shell(ip, token).cmdloop()
+            Shell(ipAndPort, token).cmdloop()
 
     except KeyboardInterrupt:
         exit(0)

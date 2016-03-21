@@ -54,6 +54,7 @@ import shutil
 
 from common import shell
 from os.path import abspath, basename, expanduser, isdir, isfile, join
+from requests import post
 from sys import exit
 
 PORT_DEFAULT = 9000
@@ -128,12 +129,19 @@ def cli(args):
                     # - parse & print
                     #
                     line = ' '.join(substituted)
-                    unrolled = ['-F %s=@%s' % (k, v) for k, v in files.items()]
                     digest = 'sha1=' + hmac.new(self.token, line, hashlib.sha1).hexdigest() if self.token else ''
-                    snippet = 'curl -X POST -H "X-Shell:%s" -H "X-Signature:%s" %s %s/shell' % (line, digest, ' '.join(unrolled), ipAndPort)
-                    code, out = shell(snippet, cwd=tmp)
+                    url = 'http://%s/shell' % ipAndPort
+                    headers = \
+                        {
+                            'X-Signature': digest,
+                            'X-Shell': line
+                        }                    
+                    files_post = {file_id: open(files[file_id], 'rb') for file_id in files.keys()}
+                    reply = post(url, headers=headers, files=files_post)
+                    code = reply.status_code
+                    out = reply.content                    
                     js = json.loads(out.decode('utf-8'))
-                    print(js['out'] if code is 0 else 'i/o failure (is the proxy down ?)')
+                    print(js['out'] if code is 200 else 'i/o failure (is the proxy down ?)')
 
         #
         # - partition ip and args by looking for OCHOPOD_PROXY first

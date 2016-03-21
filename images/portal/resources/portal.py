@@ -98,6 +98,7 @@ if __name__ == '__main__':
                     if not line and code is not None:
                         break
                     elif line:
+                        logger.debug(line.rstrip('\n'))
                         out += [line.rstrip('\n')]
 
                 ok = pid.returncode == 0

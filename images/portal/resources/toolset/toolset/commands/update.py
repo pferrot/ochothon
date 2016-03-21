@@ -129,7 +129,7 @@ class _Automation(Thread):
 
 
                     def _run_command(command, need_template = False):
-                        #logger.debug("Running command: %s" % command)
+                        logger.debug("Running command: %s" % command)
                         try:
                             out = []
                             tmp = tempfile.mkdtemp()
@@ -145,7 +145,7 @@ class _Automation(Thread):
                                 elif line:
                                     out += [line.rstrip('\n')]
 
-                            #logger.debug("Command output: %s" % ' '.join(out))
+                            logger.debug("Command output: %s" % ' '.join(out))
                             ok = pid.returncode == 0
                             return ok, json.loads(' '.join(out))
                         finally:
@@ -162,11 +162,7 @@ class _Automation(Thread):
                         return _run_command('kill %s -t %d -i %s' % (qualified, self.timeout, ' '.join(str(x) for x in seq)))
 
                     def _scale_command(seq, nb_pods):
-                        # We do not need a long timeout as we check things ourselves anyway.
-                        scale_result, scale_output = _run_command('scale %s -g %d -f @%d -t %d' % (qualified, seq, nb_pods, 5))
-                        #logger.debug("Scale result: %s" % str(scale_result))
-                        #logger.debug("Scale output: %s" % str(scale_output))
-                        return scale_result, scale_output
+                        return _run_command('scale %s -g %d -f @%d -t %d' % (qualified, seq, nb_pods, self.timeout))
 
                     def _grep_command():
                         return _run_command('grep %s' % qualified)
@@ -193,9 +189,9 @@ class _Automation(Thread):
                             # It might take some time until ne new pod is available through grep command.
                             @retry(timeout=60, pause=5)
                             def _get_new_pod_seq(): 
-                                #seq_new = _grep_seq()
-                                _, js_new = run(self.proxy, _query_existing, 10)
-                                seq_new = [i[1] for i in js_new]                   
+                                seq_new = _grep_seq()
+                                #_, js_new = run(self.proxy, _query_existing, 10)
+                                #seq_new = [i[1] for i in js_new]                   
                                 
                                 seq_diff = _diff(seq_new, seq_orig + seq_added_already)
                                 assert len(seq_diff) == 1, 'exactly one pod should have been added'
@@ -234,12 +230,10 @@ class _Automation(Thread):
 
                         def _grep_seq():
                             grep_result, grep_output = _grep_command()
-                            #logger.debug("Grep output: %s" % str(grep_output))
                             assert grep_result, "failed to grep container"
                             seq = []
                             for one_key in grep_output.keys():
                                 seq.append(int(one_key[one_key.rfind('#') + 1:]))
-                            #logger.debug("Grep seq: %s" % ', '.join(str(x) for x in seq))
                             return seq
 
 
@@ -278,10 +272,6 @@ class _Automation(Thread):
                     else:
                         logger.debug("Rolling update: OFF")
                         self.out['ok'] = _kill_deploy([i[1] for i in js])
-
-                    #logger.debug("ok: %s" % str(self.out['ok']))
-                    #logger.debug("up: %s" % ', '.join(str(x) for x in self.out['up']))
-                    #logger.debug("down: %s" % ', '.join(str(x) for x in self.out['down']))
 
 
         except AssertionError as failure:

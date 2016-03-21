@@ -133,10 +133,14 @@ class _Automation(Thread):
                 def _spin():
                     def _query(zk):
                         replies = fire(zk, self.cluster, 'info')
-                        return [seq for seq, _, _ in replies.values()]
+                        return [(seq, hints['application'], hints['task']) for (seq, hints, _) in replies.values()]
 
                     js = run(self.proxy, _query)
-                    assert len(js) == target, 'not all pods running yet'
+                    if self.group is not None:
+                        nb_pods = sum(1 for (_, key, _) in js if key == app)
+                    else:
+                        nb_pods = len(js)
+                    assert nb_pods == target, 'not all pods running yet'
                     return js
 
                 _spin()
